@@ -8,6 +8,8 @@ class SymptomScreen extends StatefulWidget {
 
 class _SymptomScreenState extends State<SymptomScreen> {
   final TextEditingController _symptomController = TextEditingController();
+  final TextEditingController _tensionController = TextEditingController();
+  final TextEditingController _capillaryRefillController = TextEditingController();
 
   // Sabit belirtiler ve hastalık veritabanı
   Map<String, Map<String, String>> symptomsDatabase = {
@@ -84,6 +86,8 @@ class _SymptomScreenState extends State<SymptomScreen> {
         SnackBar(content: Text('Belirtiler başarıyla gönderildi!')),
       );
       _symptomController.clear();
+      _tensionController.clear();
+      _capillaryRefillController.clear();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Hata oluştu: $e')),
@@ -94,29 +98,67 @@ class _SymptomScreenState extends State<SymptomScreen> {
   // Semptomları analiz etme ve sonuçları gösterme
   Future<void> _analyzeSymptoms() async {
     final String symptomsText = _symptomController.text.trim().toLowerCase();
-    if (symptomsText.isEmpty) {
+    final String tension = _tensionController.text.trim();
+    final String capillaryRefill = _capillaryRefillController.text.trim();
+
+    if (symptomsText.isEmpty || tension.isEmpty || capillaryRefill.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lütfen belirtileri girin!')),
+        SnackBar(content: Text('Lütfen tüm bilgileri doldurun!')),
       );
       return;
     }
 
     List<String> symptomsList = symptomsText.split(',').map((e) => e.trim()).toList();
 
-    // Her bir semptom için analiz yap
-    List<String> resultText = [];
+    // En yaygın hastalığı bulma
+    Map<String, int> diseaseCount = {};
     for (var symptom in symptomsList) {
-      String disease = "Belirlenemedi";
-      String suggestions = "Daha fazla bilgi gerekebilir. Lütfen bir doktora danışın.";
-
       symptomsDatabase.forEach((key, value) {
         if (symptom.contains(key)) {
-          disease = value["disease"]!;
-          suggestions = value["suggestions"]!;
+          diseaseCount[value["disease"]!] = (diseaseCount[value["disease"]!] ?? 0) + 1;
         }
       });
+    }
 
-      resultText.add('Semptom: $symptom\nTahmin edilen hastalık: $disease\nÖneriler:\n$suggestions\n');
+    String disease = diseaseCount.isEmpty
+        ? "Belirlenemedi"
+        : diseaseCount.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    String suggestions = "Daha fazla bilgi gerekebilir. Lütfen bir doktora danışın.";
+    symptomsDatabase.forEach((key, value) {
+      if (value["disease"] == disease) {
+        suggestions = value["suggestions"]!;
+      }
+    });
+
+    // Tansiyon değeri işlemi (örneğin: 120/80)
+    final parts = tension.split('/');
+    int systolic = 0;
+    int diastolic = 0;
+
+    if (parts.length == 2) {
+      try {
+        systolic = int.parse(parts[0].trim());
+        diastolic = int.parse(parts[1].trim());
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Tansiyon değeri geçersiz! Lütfen doğru formatta girin.')),
+        );
+        return;
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lütfen tansiyonu doğru formatta girin (örneğin: 120/80).')),
+      );
+      return;
+    }
+
+    // Kırmızı, sarı, yeşil kodlama (tansiyon ve kapiler geri dolum süresine göre)
+    String healthStatus = "Yeşil"; // Normal
+    if (systolic < 90 || int.parse(capillaryRefill) > 3) {
+      healthStatus = "Kırmızı"; // Acil durum
+    } else if (systolic < 110) {
+      healthStatus = "Sarı"; // Dikkatli olun
     }
 
     // Firebase'e semptom verisini gönder
@@ -127,7 +169,8 @@ class _SymptomScreenState extends State<SymptomScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Tahmin Sonucu'),
-        content: Text(resultText.join('\n\n')),
+        content: Text(
+            'Tahmin edilen hastalık: $disease\n\nÖneriler:\n$suggestions\n\nSağlık Durumu: $healthStatus'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -156,50 +199,33 @@ class _SymptomScreenState extends State<SymptomScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  'Health Management System',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                SizedBox(height: 40),
                 TextField(
                   controller: _symptomController,
-                  maxLines: 4,
                   decoration: InputDecoration(
-                    hintText: 'Belirtileri buraya yazın... (Virgülle ayırın)',
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: 16.0,
-                      horizontal: 12.0,
-                    ),
+                    labelText: 'Belirtiler (Virgülle ayırın)',
+                    hintText: 'Örneğin: ateş, baş ağrısı, yorgunluk',
                   ),
                 ),
-                SizedBox(height: 20),
-                ElevatedButton.icon(
+                SizedBox(height: 16),
+                TextField(
+                  controller: _tensionController,
+                  decoration: InputDecoration(
+                    labelText: 'Tansiyon (Örneğin: 120/80)',
+                    hintText: 'Tansiyonunuzu girin',
+                  ),
+                ),
+                SizedBox(height: 16),
+                TextField(
+                  controller: _capillaryRefillController,
+                  decoration: InputDecoration(
+                    labelText: 'Kapiller Geri Dolum Süresi (saniye)',
+                    hintText: 'Kapiller geri dolum sürenizi girin',
+                  ),
+                ),
+                SizedBox(height: 32),
+                ElevatedButton(
                   onPressed: _analyzeSymptoms,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 5,
-                  ),
-                  icon: Icon(Icons.send, color: Colors.white),
-                  label: Text(
-                    'Gönder',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
+                  child: Text('Belirtileri Analiz Et'),
                 ),
               ],
             ),
@@ -209,4 +235,3 @@ class _SymptomScreenState extends State<SymptomScreen> {
     );
   }
 }
-
