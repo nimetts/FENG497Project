@@ -22,7 +22,6 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
 
-      // Get the user's role
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -30,7 +29,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       String userRole = userDoc['role'];
 
-      // Navigate to the appropriate screen based on the user role
       if (userRole == 'patient') {
         Navigator.pushReplacement(
           context,
@@ -74,7 +72,6 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(height: 20),
             TextButton(
               onPressed: () {
-                // Navigate to the RegisterScreen when clicked
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => RegisterScreen()),
